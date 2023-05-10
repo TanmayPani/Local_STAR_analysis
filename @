@@ -1,0 +1,95 @@
+#ifndef DataQA_h
+#define DataQA_h
+
+#include "StEventTreeStruct.h"
+
+using namespace std;
+
+class DataQA {
+public :
+   TFile *InputFile = nullptr;
+   TTree *Events = nullptr;   //!pointer to the analyzed TTree or TChain
+
+// Fixed size dimensions of array or collections stored in the TTree if any.
+   static constexpr Int_t kMaxTracks = 19;
+   static constexpr Int_t kMaxTowers = 3045;
+
+   // Declaration of leaf types
+   MyStEvent       *Event;
+   // List of branches
+   TBranch        *b_Event;   //!
+   DataQA();
+   virtual ~DataQA();
+   virtual void     Init(TTree *tree);
+   virtual void     Loop(); 
+};
+
+#endif
+
+#ifdef DataQA_cxx
+DataQA::DataQA(){
+  
+   InputFile = new TFile("../DATAFILES/AuAu_200_MidLumi_100Largest.root");
+   Events = (TTree*)InputFile->Get("Event_Info");
+   Init(Events);
+}
+
+DataQA::~DataQA(){
+
+}
+
+void DataQA::Init(TTree *tree){
+   tree->SetBranchAddress("fUniqueID", &fUniqueID, &b_Event_fUniqueID);
+   tree->SetBranchAddress("fBits", &fBits, &b_Event_fBits);
+   tree->SetBranchAddress("RunID", &RunID, &b_Event_RunID);
+   tree->SetBranchAddress("EventID", &EventID, &b_Event_EventID);
+   tree->SetBranchAddress("gRefMult", &gRefMult, &b_Event_gRefMult);
+   tree->SetBranchAddress("RefMult", &RefMult, &b_Event_RefMult);
+   tree->SetBranchAddress("RefMultCorr", &RefMultCorr, &b_Event_RefMultCorr);
+   tree->SetBranchAddress("Centrality", &Centrality, &b_Event_Centrality);
+   tree->SetBranchAddress("Peripheral_ReWeight", &Peripheral_ReWeight, &b_Event_Peripheral_ReWeight);
+   tree->SetBranchAddress("MB5toMB30_ReWeight", &MB5toMB30_ReWeight, &b_Event_MB5toMB30_ReWeight);
+   tree->SetBranchAddress("IsMB", &IsMB, &b_Event_IsMB);
+   tree->SetBranchAddress("IsMB5", &IsMB5, &b_Event_IsMB5);
+   tree->SetBranchAddress("IsMB30", &IsMB30, &b_Event_IsMB30);
+   tree->SetBranchAddress("IsHT0", &IsHT0, &b_Event_IsHT0);
+   tree->SetBranchAddress("IsHT1", &IsHT1, &b_Event_IsHT1);
+   tree->SetBranchAddress("IsHT2", &IsHT2, &b_Event_IsHT2);
+   tree->SetBranchAddress("IsHT3", &IsHT3, &b_Event_IsHT3);
+   tree->SetBranchAddress("pVtx_Z", &pVtx_Z, &b_Event_pVtx_Z);
+   tree->SetBranchAddress("pVtx_r", &pVtx_r, &b_Event_pVtx_r);
+   tree->SetBranchAddress("VPD_Vz", &VPD_Vz, &b_Event_VPD_Vz);
+   tree->SetBranchAddress("ZDCxx", &ZDCxx, &b_Event_ZDCxx);
+   tree->SetBranchAddress("BBCxx", &BBCxx, &b_Event_BBCxx);
+   tree->SetBranchAddress("NTriggers", &NTriggers, &b_Event_NTriggers);
+   tree->SetBranchAddress("NTracks", &NTracks, &b_Event_NTracks);
+   tree->SetBranchAddress("NTowers", &NTowers, &b_Event_NTowers);
+   tree->SetBranchAddress("MaxTrackPt", &MaxTrackPt, &b_Event_MaxTrackPt);
+   tree->SetBranchAddress("MaxTowerEt", &MaxTowerEt, &b_Event_MaxTowerEt);
+   tree->SetBranchAddress("Tracks", &Tracks_, &b_Event_Tracks_);
+   tree->SetBranchAddress("Tracks.fUniqueID", Tracks_fUniqueID, &b_Tracks_fUniqueID);
+   tree->SetBranchAddress("Tracks.fBits", Tracks_fBits, &b_Tracks_fBits);
+   tree->SetBranchAddress("Tracks.index", Tracks_index, &b_Tracks_index);
+   tree->SetBranchAddress("Tracks.Pt", Tracks_Pt, &b_Tracks_Pt);
+   tree->SetBranchAddress("Tracks.Eta", Tracks_Eta, &b_Tracks_Eta);
+   tree->SetBranchAddress("Tracks.Phi", Tracks_Phi, &b_Tracks_Phi);
+   tree->SetBranchAddress("Tracks.Charge", Tracks_Charge, &b_Tracks_Charge);
+   tree->SetBranchAddress("Tracks.trackingEff", Tracks_trackingEff, &b_Tracks_trackingEff);
+   tree->SetBranchAddress("Tracks.MatchedTowerIndex", Tracks_MatchedTowerIndex, &b_Tracks_MatchedTowerIndex);
+   tree->SetBranchAddress("Towers", &Towers_, &b_Event_Towers_);
+   tree->SetBranchAddress("Towers.fUniqueID", Towers_fUniqueID, &b_Towers_fUniqueID);
+   tree->SetBranchAddress("Towers.fBits", Towers_fBits, &b_Towers_fBits);
+   tree->SetBranchAddress("Towers.index", Towers_index, &b_Towers_index);
+   tree->SetBranchAddress("Towers.ADC", Towers_ADC, &b_Towers_ADC);
+   tree->SetBranchAddress("Towers.Energy", Towers_Energy, &b_Towers_Energy);
+   tree->SetBranchAddress("Towers.Eta", Towers_Eta, &b_Towers_Eta);
+   tree->SetBranchAddress("Towers.Phi", Towers_Phi, &b_Towers_Phi);
+   tree->SetBranchAddress("Towers.IsHT0", Towers_IsHT0, &b_Towers_IsHT0);
+   tree->SetBranchAddress("Towers.IsHT1", Towers_IsHT1, &b_Towers_IsHT1);
+   tree->SetBranchAddress("Towers.IsHT2", Towers_IsHT2, &b_Towers_IsHT2);
+   tree->SetBranchAddress("Towers.IsHT3", Towers_IsHT3, &b_Towers_IsHT3);
+   tree->SetBranchAddress("Towers.NMatchedTracks", Towers_NMatchedTracks, &b_Towers_NMatchedTracks);
+   tree->SetBranchAddress("Towers.EnergyCorr", Towers_EnergyCorr, &b_Towers_EnergyCorr);
+}
+
+#endif // #ifdef DataQA_cxx
