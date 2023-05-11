@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "DataQA.C": "cpp"
-    }
+        "DataQA.C": "cpp",
+        "FastJetMaker.C": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

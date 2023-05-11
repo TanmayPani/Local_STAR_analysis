@@ -1,74 +1,102 @@
 #define DataQA_cxx
 
 #include "DataQA.h"
-#include "FastJetMaker.h"
 #include "TStarEventClass/TStarEvent.h"
 #include "TStarEventClass/TStarTrack.h"
+#include "TStarEventClass/TStarTower.h"
 
 void DataQA::DeclareHistograms(){
    hJetPt = new TH1F("hJetPt", "Jet Pt", 60, 0, 60);
+   hJetEta = new TH1F("hJetEta", "Jet #eta", 20, -1., 1.);
+   hJetPhi = new TH1F("hJetPhi", "Jet #phi", 60, 0., twopi);
 }
 
-void DataQA::Loop(FastJetMaker *fj = nullptr){
+void DataQA::LoopOverRuns(){
+   DeclareHistograms();
 
-   DeclareHistograms(); 
+   ifstream runList(run_list.c_str(), ios::in);
+   if(!runList){
+      cerr<<"ERROR: Unable to open input list file '"<<run_list<<"'."<<endl;
+      return;
+   }
+      
+   int count = 0;
+   while(getline(runList, runNumber) && count < MaxFiles){
+      cout<<"processing file #"<<count+1<<" ("<< file_path<<runNumber<<".root)..."<<endl;  
 
-   if(!fj){
-      cout<<"FastJetMaker not supplied, making one here..."<<endl;
-      fj = new FastJetMaker(antikt_algorithm, 0.4, BIpt2_scheme); //Define FastJet JetDefinition
-	   fj->SetConstituentPtMin(2.0);
-	   fj->SetConstituentAbsEtaMax(1.0);
-	   fj->SetJetPtMin(10.0);
-	   fj->SetJetAbsEtaMax(0.6);
-      fj->FastJetAreaMaker(active_area_explicit_ghosts, 1.2);
+      _File.reset(new TFile((file_path+runNumber+".root").c_str(), "READ"));
+      if(_File->IsZombie()){
+         cerr<<"ERROR: Unable to open TTree TFile '"<<file_path<<runNumber<<".root'"<<endl;
+         _File->Close();
+         continue; 
+      }
+
+      cout<<"File not Zombie :) Getting TTree from file..."<<endl;
+
+      _Tree.reset((TTree*)_File->Get("Event_Info"));
+      if(!_Tree){
+         cerr<<"ERROR: Can't obtain TTree!"<<endl;
+      }
+
+      _Tree->SetBranchAddress("Events", &Event, &b_Event);
+
+      LoopOverEvents();
+
+      count++;
+
+      if(_Tree)_Tree.reset();
+      if(_File->IsOpen())_File->Close();
+      if(_File)_File.reset();
    }
 
-   int NJets = 0;
+   WriteOutput();
+}
 
-//   for (int ievt=0; ievt<_Chain->GetEntriesFast(); ievt++){    
-   for (int ievt=50000; ievt<60000; ievt++){    
-      _Chain->GetEntry(ievt);
-      fj->EmptyAllVectors();
+void DataQA::LoopOverEvents(){
+   int NEvents = _Tree->GetEntriesFast();
 
-      //if(!Event->IsHT2())continue;
+   cout<<"Analyzing "<<NEvents<<" events from Run with ID:"<<runNumber<<endl;
 
-      _Tracks = static_cast<TClonesArray*>(Event->GetTracks());
+   int NRunJets = 0;
 
+   for (int ievt=0; ievt < NEvents; ievt++){ 
+      _Tree->GetEntry(ievt);
+
+      if(!Event->IsHT2())continue;
+
+      //cout<<"Filling tracks into FastJetMaker..."<<endl;
+      TClonesArray* _Tracks = static_cast<TClonesArray*>(Event->GetTracks());
       for(int itrk = 0; itrk < _Tracks->GetEntriesFast(); itrk++){
-         TStarTrack *trk = static_cast<TStarTrack*>(_Tracks->At(itrk));
-         //hTr_Pt->Fill(trk->Pt());
-         fj->InputForClustering(itrk, trk->Charge(), trk->Px(), trk->Py(), trk->Pz(), trk->Pi0E());
-
-         //delete trk;
+         TStarTrack* _track = static_cast<TStarTrack*>(_Tracks->At(itrk));
+         fjMaker->InputForClustering(itrk, _track);
       }
-
-      _Towers = static_cast<TClonesArray*>(Event->GetTowers());
-
+      //cout<<"Filling towers into FastJetMaker..."<<endl;
+      TClonesArray* _Towers = static_cast<TClonesArray*>(Event->GetTowers());
       for(int itow = 0; itow < _Towers->GetEntriesFast(); itow++){
-         TStarTower *tow = static_cast<TStarTower*>(_Towers->At(itow));
-         fj->InputForClustering(itow, 0, tow->Px(), tow->Py(), tow->Pz(), tow->E());
-
-         //delete tow;
+         TStarTower* _tower = static_cast<TStarTower*>(_Towers->At(itow));
+         fjMaker->InputForClustering(itow, _tower);
       }
+      //cout<<"Getting clustered jets..."<<endl;
 
-      Jets = fj->GetClusteredJets();
+      vector<PseudoJet> Jets = fjMaker->GetJets();
 
-      NJets += Jets->size();
-
-      for(int ijet = 0; ijet < Jets->size(); ijet++){
-         PseudoJet *_jet = static_cast<PseudoJet*>(&(Jets->at(ijet)));
-
-         cout<<_jet->perp()<<endl;
-
-         hJetPt->Fill(_jet->perp());
-
-         //delete _jet;
+      //cout<<"Running over jets..."<<endl;
+      int NJets = Jets.size();
+      if(NJets < 1) continue;
+      
+      for(PseudoJet& _jet : Jets){
+         //cout<<_jet.perp()<<endl;
+         hJetPt->Fill(_jet.perp());
+         hJetEta->Fill(_jet.eta());
+         hJetPhi->Fill(_jet.phi());
       }
+      //cout<<"Ran over "<<NJets<<" jets"<<endl;
+      NRunJets += NJets;
 
-      if(ievt%1000==0)cout<<"Event #: "<<ievt+1<<" NJets: "<<NJets<<endl;
+      //cout<<"clearing fjMaker..."<<endl;
+      fjMaker->Clear(); 
 
+      if(ievt%1000==0)cout<<"On Event #: "<<ievt+1<<endl;
    }
-
-   hJetPt->Draw("EHIST");
-
+   cout<<"Clustered "<<NRunJets<<" jets from run with ID: "<<runNumber<<endl; 
 }

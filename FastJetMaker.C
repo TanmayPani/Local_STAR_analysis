@@ -1,39 +1,44 @@
 #define FastJetMaker_cxx
 
 #include "FastJetMaker.h"
+#include "TStarEventClass/TStarTrack.h"
+#include "TStarEventClass/TStarTower.h"
 
 FastJetMaker::FastJetMaker(){
-    jet_def = new JetDefinition(antikt_algorithm, 0.4, BIpt2_scheme, Best);
-    cout<<jet_def->description()<<endl;
+    jet_def.reset(new JetDefinition(antikt_algorithm, 0.4, BIpt2_scheme, Best));   
 }
 
 FastJetMaker::FastJetMaker(JetAlgorithm algo, float R, RecombinationScheme reco_sch){
-    jet_def = new JetDefinition(algo, R, reco_sch, Best);
-    cout<<jet_def->description()<<endl;
+    jet_def.reset(new JetDefinition(algo, R, reco_sch, Best));
+    //cout<<jet_def->description()<<endl;
 }
 
 FastJetMaker::~FastJetMaker(){
-    if(jet_def)delete jet_def;
-    if(area_def)delete area_def;
-    if(area_spec)delete area_spec;
-    if(CS_Area)delete CS_Area;
-    if(CS)delete CS;
+     
 }
 
 void FastJetMaker::FastJetAreaMaker(AreaType area_type, float MaxRap){
-    area_spec = new GhostedAreaSpec(MaxRap);
-	area_def = new AreaDefinition(area_type, *area_spec);
+    area_spec.reset(new GhostedAreaSpec(MaxRap));
+	area_def.reset(new AreaDefinition(area_type, *area_spec));
     doJetAreas = true;
-}
-
-void FastJetMaker::InputForClustering(PseudoJet constit){
-    constituents_before_cuts.push_back(move(constit));
 }
 
 void FastJetMaker::InputForClustering(int i, short ch, float px, float py, float pz, float E){
     PseudoJet constit(px, py, pz, E);
     constit.set_user_info(new UserInfo(i, ch));
-    constituents_before_cuts.push_back(move(constit));
+    full_event.push_back(move(constit));
+}
+
+void FastJetMaker::InputForClustering(int i, TStarTrack *trk){
+    PseudoJet constit(trk->Px(), trk->Py(), trk->Pz(), trk->Pi0E());
+    constit.set_user_info(new UserInfo(i, trk->Charge()));
+    full_event.push_back(move(constit));
+}
+
+void FastJetMaker::InputForClustering(int i, TStarTower *tow){
+    PseudoJet constit(tow->Px(), tow->Py(), tow->Pz(), tow->E());
+    constit.set_user_info(new UserInfo(i, 0));
+    full_event.push_back(move(constit));
 }
 
 //void FastJetMaker::InputForClustering(int i, short ch, float pt, float eta, float phi, float M){
@@ -43,20 +48,22 @@ void FastJetMaker::InputForClustering(int i, short ch, float px, float py, float
 //    float E = sqrt(px*px + py*py + pz*pz + M*M);
 //    PseudoJet constit(px, py, pz, E);
 //    constit.set_user_info(new UserInfo(i, ch));
-//    constituents_before_cuts.push_back(move(constit));
+//    full_event.push_back(move(constit));
 //}
 
-vector<PseudoJet>* FastJetMaker::GetClusteredJets(){
-    ApplyConstituentKinematicCuts();
+vector<PseudoJet> FastJetMaker::GetJets(){
+    jet_constituents = ConstituentSelector(full_event);
+    full_event.clear();
+    vector<PseudoJet> jets;
     if(!doJetAreas){
-        CS = new ClusterSequence(jet_constituents, *jet_def);
-        all_jets = CS->inclusive_jets();
+        CS.reset(new ClusterSequence(jet_constituents, *jet_def));
+        jets = JetSelector(CS->inclusive_jets());
     }else{
-        CS_Area = new ClusterSequenceArea(jet_constituents, *jet_def, *area_def);
-        all_jets = no_ghost(CS_Area->inclusive_jets());
+        CS_Area.reset(new ClusterSequenceArea(jet_constituents, *jet_def, *area_def));
+        jets = JetSelector(no_ghost(CS_Area->inclusive_jets()));
     }
-    ApplyJetKinematicCuts();
-    return static_cast<vector<PseudoJet>*>(&jets);
+    jet_constituents.clear();
+    return jets;
 }
 
 vector<PseudoJet>* FastJetMaker::GetConstituents(PseudoJet *jet){
@@ -70,66 +77,11 @@ bool FastJetMaker::IsConstituentGhost(PseudoJet *constit){
     else return !constit->has_user_info();
 }
 
-void FastJetMaker::SetConstituentPtMin(float cpt){
-    const_kin_cuts.push_back(SelectorPtMin(cpt));
-}
+void FastJetMaker::Clear(){
+    if(!full_event.empty())full_event.clear();
+    if(!jet_constituents.empty())jet_constituents.clear();
 
-void FastJetMaker::SetConstituentPtMax(float cpt){
-    const_kin_cuts.push_back(SelectorPtMax(cpt));
-}
-
-void FastJetMaker::SetConstituentEtaMin(float ceta){
-    const_kin_cuts.push_back(SelectorEtaMin(ceta));
-}
-
-void FastJetMaker::SetConstituentEtaMax(float ceta){
-    const_kin_cuts.push_back(SelectorEtaMax(ceta));
-}
-
-void FastJetMaker::SetConstituentAbsEtaMax(float ceta){
-    const_kin_cuts.push_back(SelectorAbsEtaMax(ceta));
-}
-
-void FastJetMaker::ApplyConstituentKinematicCuts(){
-    Selector Selector_All = const_kin_cuts[0];
-    for(int i = 1; i<const_kin_cuts.size(); i++){
-        Selector_All = Selector_All*const_kin_cuts[i];
-    }
-    jet_constituents = Selector_All(constituents_before_cuts); 
-}
-
-void FastJetMaker::SetJetPtMin(float jpt){
-    jet_kin_cuts.push_back(SelectorPtMin(jpt));
-}
-
-void FastJetMaker::SetJetPtMax(float jpt){
-    jet_kin_cuts.push_back(SelectorPtMax(jpt));
-}
-
-void FastJetMaker::SetJetEtaMin(float jeta){
-    jet_kin_cuts.push_back(SelectorEtaMin(jeta));
-}
-
-void FastJetMaker::SetJetEtaMax(float jeta){
-    jet_kin_cuts.push_back(SelectorEtaMax(jeta));
-}
-
-void FastJetMaker::SetJetAbsEtaMax(float jeta){
-    jet_kin_cuts.push_back(SelectorAbsEtaMax(jeta));
-}
-
-void FastJetMaker::ApplyJetKinematicCuts(){
-    Selector Selector_All = jet_kin_cuts[0];
-    for(int i = 1; i<jet_kin_cuts.size(); i++){
-        Selector_All = Selector_All*jet_kin_cuts[i];
-    }
-    jets = Selector_All(all_jets); 
-}
-
-void FastJetMaker::EmptyAllVectors(){
-    constituents_before_cuts.clear();
-    jet_constituents.clear();
-    all_jets.clear();
-    jets.clear();
+    if(CS_Area)CS_Area.reset();  
+    if(CS)CS.reset();
 }
 

@@ -13,6 +13,9 @@ R__LOAD_LIBRARY(/opt/homebrew/Cellar/fastjet/3.4.0_1/lib/libfastjet.dylib)
 
 using namespace fastjet;
 
+class TStarTrack;
+class TStarTower;
+
 class FastJetMaker{
     public:
         FastJetMaker(); //default constructor, antikt, R=0.4, BIpt2 recombination
@@ -23,65 +26,69 @@ class FastJetMaker{
         //Calculating areas will increase computation time by a LOT, do this only for data and detector level
         //NO AREA NEEDED for particle level from MC simulations
 
-        inline void InputForClustering(PseudoJet constit); 
-       inline void InputForClustering(int i, short ch, float px, float py, float pz, float E);
+        inline void InputForClustering(PseudoJet constit){full_event.push_back(move(constit));}
+        inline void InputForClustering(int i, short ch, float px, float py, float pz, float E);
+        inline void InputForClustering(int i, TStarTrack* trk);
+        inline void InputForClustering(int i, TStarTower* trk);
         //inline void InputForClustering(int i, short ch, float pt, float eta, float phi, float M);
 
-        vector<PseudoJet>* GetClusteredJets(); //returns a pointer to the vector<PseudoJet> jets defined below
+        vector<PseudoJet> GetJets(); //returns clustered vector<PseudoJet> of jets 
         vector<PseudoJet>* GetConstituents(PseudoJet* jet); //returns a pointer to the vector<PseudoJet> for constituents for a jet
 
         //Kinematic cuts for constituents, can add more as needed...
-        void SetConstituentPtMin(float pt);
-        void SetConstituentPtMax(float pt);
-        void SetConstituentEtaMin(float eta);
-        void SetConstituentEtaMax(float eta);
-        void SetConstituentAbsEtaMax(float eta);  
-        void ApplyConstituentKinematicCuts(); //Apply all constituent kinematic cuts that are called
+        void SetConstituentPtMin(float pt)     {ConstituentSelector = ConstituentSelector * SelectorPtMin(pt);}
+        void SetConstituentPtMax(float pt)     {ConstituentSelector = ConstituentSelector * SelectorPtMax(pt);}
+        void SetConstituentEtaMin(float eta)   {ConstituentSelector = ConstituentSelector * SelectorEtaMin(eta);}
+        void SetConstituentEtaMax(float eta)   {ConstituentSelector = ConstituentSelector * SelectorEtaMax(eta);}
+        void SetConstituentAbsEtaMax(float eta){ConstituentSelector = ConstituentSelector * SelectorAbsEtaMax(eta);}
 
         //Kinematic cuts for jets, can add more as needed...
-        void SetJetPtMin(float pt);
-        void SetJetPtMax(float pt);
-        void SetJetEtaMin(float eta);
-        void SetJetEtaMax(float eta);
-        void SetJetAbsEtaMax(float eta);
+        void SetJetPtMin(float pt)     {JetSelector = JetSelector * SelectorPtMin(pt);}
+        void SetJetPtMax(float pt)     {JetSelector = JetSelector * SelectorPtMax(pt);}
+        void SetJetEtaMin(float eta)   {JetSelector = JetSelector * SelectorEtaMin(eta);}
+        void SetJetEtaMax(float eta)   {JetSelector = JetSelector * SelectorEtaMax(eta);}
+        void SetJetAbsEtaMax(float eta){JetSelector = JetSelector * SelectorAbsEtaMax(eta);}
 
-        void ApplyJetKinematicCuts(); //Apply all the jet kinematic cuts that are called
+        void MakerDescription(){
+            cout<<"Jet definition: "<<jet_def->description()<<endl;
+            if(area_def)cout<<"Jet area definition: "<<area_def->description()<<endl;
+            cout<<"Constituent selection: "<<ConstituentSelector.description()<<endl;
+            cout<<"Jet selection: "<<JetSelector.description()<<endl;
+        }
 
         bool IsConstituentGhost(PseudoJet *constit);
 
-        void EmptyAllVectors();
+        void Clear();
     
     private:
-        JetDefinition *jet_def = nullptr; 
+        unique_ptr<JetDefinition> jet_def = nullptr; 
         //JetDefinition jet_def;
         bool doJetAreas = false;
-        AreaDefinition *area_def = nullptr;
-        GhostedAreaSpec *area_spec = nullptr;
+        unique_ptr<AreaDefinition> area_def = nullptr;
+        unique_ptr<GhostedAreaSpec> area_spec = nullptr;
 
-        ClusterSequenceArea *CS_Area = nullptr;
-	    ClusterSequence *CS = nullptr;
+        unique_ptr<ClusterSequenceArea> CS_Area = nullptr;
+	    unique_ptr<ClusterSequence> CS = nullptr;
 
-        Selector no_ghost = !SelectorIsPureGhost();
-        vector<Selector> const_kin_cuts;
-        vector<Selector> jet_kin_cuts;
+        Selector no_ghost = !SelectorIsPureGhost(); 
+        Selector JetSelector = !SelectorIsZero();
+        Selector ConstituentSelector = !SelectorIsZero(); 
 
-        vector<PseudoJet> constituents_before_cuts;
+        vector<PseudoJet> full_event;
         vector<PseudoJet> jet_constituents;
-        vector<PseudoJet> all_jets;
 
-    protected:
-        vector<PseudoJet> jets; //Final jets of the events are contained here
-
+    //protected:
+        //vector<PseudoJet> jets; //Final jets of the events are contained here 
 };
 
 class UserInfo: public PseudoJet::UserInfoBase{//User Info class to include non-kinematic details of the particles into the pseudojet objects...
 public:
-	UserInfo(const int indx, const short & ch):_charge(ch), _index(indx){}
+    UserInfo(const int indx, const short & ch):_charge(ch), _index(indx){}
     short getIndex() const {return _index;}
-	short getCharge() const {return _charge;}
+    short getCharge() const {return _charge;}
 protected:
     int _index;
-	short _charge;
+    short _charge;
 };
 
 #endif
